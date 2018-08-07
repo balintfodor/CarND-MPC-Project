@@ -77,6 +77,18 @@ void globalPointsToVehiclePoints(vector<double>& ptsx, vector<double>& ptsy,
     }
 }
 
+double calculateInitialCte(Eigen::VectorXd coeffs, double y = 0) {
+  return y - polyeval(coeffs, 0);
+}
+
+double calculateInitialEpsi(Eigen::VectorXd coeffs, double psi = 0) {
+  Eigen::VectorXd deriv(coeffs.size());
+  for (int i = 1; i < coeffs.size(); ++i) {
+    deriv(i - 1) = coeffs(i) * i;
+  }
+  return psi - atan(polyeval(coeffs, 0));
+}
+
 int main() {
   using namespace Eigen;
 
@@ -111,6 +123,14 @@ int main() {
           VectorXd yvals = Map<VectorXd, Unaligned>(ptsy.data(), ptsy.size());
 
           VectorXd coeffs = polyfit(xvals, yvals, 3);
+          VectorXd initialState(6);
+          // x, y, psi, v, cte, epsi
+          // in vehicle coordinate system
+          initialState << 0, 0, 0, v,
+            calculateInitialCte(coeffs),
+            calculateInitialEpsi(coeffs);
+
+          cout << initialState.transpose() << endl;
 
           vector<double> fitx;
           vector<double> fity;
@@ -126,7 +146,7 @@ int main() {
           *
           */
           double steer_value = 0;
-          double throttle_value = 5;
+          double throttle_value = 1;
 
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
