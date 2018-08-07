@@ -78,6 +78,8 @@ void globalPointsToVehiclePoints(vector<double>& ptsx, vector<double>& ptsy,
 }
 
 int main() {
+  using namespace Eigen;
+
   uWS::Hub h;
 
   // MPC is initialized here!
@@ -105,6 +107,17 @@ int main() {
           double v = j[1]["speed"];
 
           globalPointsToVehiclePoints(ptsx, ptsy, px, py, psi);
+          VectorXd xvals = Map<VectorXd, Unaligned>(ptsx.data(), ptsx.size());
+          VectorXd yvals = Map<VectorXd, Unaligned>(ptsy.data(), ptsy.size());
+
+          VectorXd coeffs = polyfit(xvals, yvals, 3);
+
+          vector<double> fitx;
+          vector<double> fity;
+          for (int i = 0; i < 20; ++i) {
+            fitx.push_back(i);
+            fity.push_back(polyeval(coeffs, i));
+          }
 
           /*
           * TODO: Calculate steering angle and throttle using MPC.
@@ -113,7 +126,7 @@ int main() {
           *
           */
           double steer_value = 0;
-          double throttle_value = 10;
+          double throttle_value = 5;
 
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
@@ -124,6 +137,9 @@ int main() {
           //Display the MPC predicted trajectory 
           vector<double> mpc_x_vals;
           vector<double> mpc_y_vals;
+
+          mpc_x_vals = fitx;
+          mpc_y_vals = fity;
 
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Green line
