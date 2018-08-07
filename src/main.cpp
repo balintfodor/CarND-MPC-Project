@@ -96,8 +96,9 @@ int main() {
 
   // MPC is initialized here!
   MPC mpc;
+  const double steer_factor = 1.0 / 0.436332313;
 
-  h.onMessage([&mpc](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  h.onMessage([&mpc, &steer_factor](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -130,14 +131,7 @@ int main() {
             calculateInitialCte(coeffs),
             calculateInitialEpsi(coeffs);
 
-          cout << initialState.transpose() << endl;
-
-          vector<double> fitx;
-          vector<double> fity;
-          for (int i = 0; i < 20; ++i) {
-            fitx.push_back(i);
-            fity.push_back(polyeval(coeffs, i));
-          }
+          vector<double> sol = mpc.Solve(initialState, coeffs);
 
           /*
           * TODO: Calculate steering angle and throttle using MPC.
@@ -145,8 +139,8 @@ int main() {
           * Both are in between [-1, 1].
           *
           */
-          double steer_value = 0;
-          double throttle_value = 1;
+          double steer_value = sol[0] * steer_factor;
+          double throttle_value = sol[1];
 
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
@@ -158,8 +152,8 @@ int main() {
           vector<double> mpc_x_vals;
           vector<double> mpc_y_vals;
 
-          mpc_x_vals = fitx;
-          mpc_y_vals = fity;
+          mpc_x_vals = mpc.solx;
+          mpc_y_vals = mpc.soly;
 
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Green line
