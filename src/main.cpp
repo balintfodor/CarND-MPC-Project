@@ -65,6 +65,18 @@ Eigen::VectorXd polyfit(Eigen::VectorXd xvals, Eigen::VectorXd yvals,
   return result;
 }
 
+void globalPointsToVehiclePoints(vector<double>& ptsx, vector<double>& ptsy,
+  double px, double py, double psi) {
+    double cos_psi = cos(-psi);
+    double sin_psi = sin(-psi);
+    for (int i = 0; i < ptsx.size(); ++i) {
+      double dx = ptsx[i] - px;
+      double dy = ptsy[i] - py;
+      ptsx[i] = dx * cos_psi - dy * sin_psi;
+      ptsy[i] = dx * sin_psi + dy * cos_psi;
+    }
+}
+
 int main() {
   uWS::Hub h;
 
@@ -92,14 +104,16 @@ int main() {
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
 
+          globalPointsToVehiclePoints(ptsx, ptsy, px, py, psi);
+
           /*
           * TODO: Calculate steering angle and throttle using MPC.
           *
           * Both are in between [-1, 1].
           *
           */
-          double steer_value;
-          double throttle_value;
+          double steer_value = 0;
+          double throttle_value = 10;
 
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
@@ -120,6 +134,9 @@ int main() {
           //Display the waypoints/reference line
           vector<double> next_x_vals;
           vector<double> next_y_vals;
+
+          next_x_vals = ptsx;
+          next_y_vals = ptsy;
 
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Yellow line
