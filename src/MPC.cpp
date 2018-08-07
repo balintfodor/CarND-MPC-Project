@@ -2,6 +2,7 @@
 #include <cppad/cppad.hpp>
 #include <cppad/ipopt/solve.hpp>
 #include "Eigen-3.3/Eigen/Core"
+#include "poly.h"
 
 using CppAD::AD;
 
@@ -47,7 +48,49 @@ class FG_eval {
     // NOTE: You'll probably go back and forth between this function and
     // the Solver function below.
 
+    static const double invLf = 1.0 / Lf;
 
+    fg[1 + start_x] = vars[start_x];
+    fg[1 + start_y] = vars[start_y];
+    fg[1 + start_psi] = vars[start_psi];
+    fg[1 + start_v] = vars[start_v];
+    fg[1 + start_cte] = vars[start_cte];
+    fg[1 + start_epsi] = vars[start_epsi];
+
+    for (int i = 1; i < N; ++i) {
+      AD<double> x1 = vars[start_x + i];
+      AD<double> y1 = vars[start_y + i];
+      AD<double> psi1 = vars[start_psi + i];
+      AD<double> v1 = vars[start_v + i];
+      AD<double> cte1 = vars[start_cte + i];
+      AD<double> epsi1 = vars[start_epsi + i];
+
+      AD<double> x0 = vars[start_x + i - 1];
+      AD<double> y0 = vars[start_y + i - 1];
+      AD<double> psi0 = vars[start_psi + i - 1];
+      AD<double> v0 = vars[start_v + i - 1];
+      AD<double> cte0 = vars[start_cte + i - 1];
+      AD<double> epsi0 = vars[start_epsi + i - 1];
+
+      AD<double> delta0 = vars[start_delta + i - 1];
+      AD<double> a0 = vars[start_a + i - 1];
+
+      fg[1 + start_x + i] = x1 - (x0 + v0 * CppAD::cos(psi0) * dt);
+      fg[1 + start_y + i] = y1 - (y0 + v0 * CppAD::sin(psi0) * dt);
+      fg[1 + start_psi + i] = psi1 - (psi0 - v0 * invLf * delta0 * dt);
+      fg[1 + start_v + i] = v1 - (v0 + a0 * dt);
+      fg[1 + start_cte + i] = cte1 - (y0 - polyeval(coeffs, x0) + v0 * CppAD::sin(epsi0) * dt);
+      fg[1 + start_epsi + i] = epsi1 - (epsi0 - v0 * invLf * delta0 * dt);
+    }
+
+    fg[0] = 0;
+    double ref_v = 30;
+
+    for (int t = 0; t < N; t++) {
+      fg[0] += CppAD::pow(vars[start_cte + t], 2);
+      fg[0] += CppAD::pow(vars[start_epsi + t], 2);
+      fg[0] += CppAD::pow(vars[start_v + t] - ref_v, 2);
+    }
   }
 };
 
@@ -59,7 +102,6 @@ MPC::~MPC() {}
 
 vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   bool ok = true;
-  size_t i;
   typedef CPPAD_TESTVECTOR(double) Dvector;
 
   // TODO: Set the number of model variables (includes both states and inputs).
@@ -89,9 +131,19 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   Dvector vars_upperbound(n_vars);
   // TODO: Set lower and upper limits for variables.
 
+  for (int i = 0; i < start_delta; i++) {
+    vars_lowerbound[i] = -1.0e19;
+    vars_upperbound[i] = 1.0e19;
+  }
+
   for (int i = start_delta; i < start_a; i++) {
     vars_lowerbound[i] = -0.436332313;
     vars_upperbound[i] = 0.436332313;
+  }
+
+  for (int i = start_a; i < n_vars; i++) {
+    vars_lowerbound[i] = -1.0;
+    vars_upperbound[i] = 30.0;
   }
 
   // Lower and upper limits for the constraints
@@ -103,6 +155,20 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
     constraints_upperbound[i] = 0;
   }
 
+  constraints_lowerbound[start_x] = state(0);
+  constraints_lowerbound[start_y] = state(1);
+  constraints_lowerbound[start_psi] = state(2);
+  constraints_lowerbound[start_v] = state(3);
+  constraints_lowerbound[start_cte] = state(4);
+  constraints_lowerbound[start_epsi] = state(5);
+
+  constraints_upperbound[start_x] = state(0);
+  constraints_upperbound[start_y] = state(1);
+  constraints_upperbound[start_psi] = state(2);
+  constraints_upperbound[start_v] = state(3);
+  constraints_upperbound[start_cte] = state(4);
+  constraints_upperbound[start_epsi] = state(5);
+
   // object that computes objective and constraints
   FG_eval fg_eval(coeffs);
 
@@ -112,17 +178,17 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   // options for IPOPT solver
   std::string options;
   // Uncomment this if you'd like more print information
-  options += "Integer print_level  0\n";
+  // options += "Integer print_level  0\n";
   // NOTE: Setting sparse to true allows the solver to take advantage
   // of sparse routines, this makes the computation MUCH FASTER. If you
   // can uncomment 1 of these and see if it makes a difference or not but
   // if you uncomment both the computation time should go up in orders of
   // magnitude.
-  options += "Sparse  true        forward\n";
-  options += "Sparse  true        reverse\n";
+  // options += "Sparse  true        forward\n";
+  // options += "Sparse  true        reverse\n";
   // NOTE: Currently the solver has a maximum time limit of 0.5 seconds.
   // Change this as you see fit.
-  options += "Numeric max_cpu_time          0.5\n";
+  // options += "Numeric max_cpu_time          0.5\n";
 
   // place to return solution
   CppAD::ipopt::solve_result<Dvector> solution;
