@@ -6,9 +6,11 @@
 
 using CppAD::AD;
 
+ const double MPC::steering_limit_rad = 0.436332313; // 25 deg
+
 // TODO: Set the timestep length and duration
-const size_t N = 10;
-const double dt = 0.2;
+const size_t N = 15;
+const double dt = 0.1;
 
 const size_t n_state = 6;
 const size_t n_act = 2;
@@ -34,6 +36,17 @@ const size_t start_a = start_delta + N - 1;
 //
 // This is the length from front to CoG that has a similar radius.
 const double Lf = 2.67;
+
+Eigen::VectorXd globalKinematicStep(double x0, double y0,
+  double psi0, double v0, double dt, double delta, double a)
+{
+  Eigen::VectorXd new_state(4);
+  new_state(0) = x0 + v0 * cos(psi0) * dt;
+  new_state(1) = y0 + v0 * sin(psi0) * dt;
+  new_state(2) = psi0 - v0 / Lf * delta * dt;
+  new_state(3) = v0 + a * dt;
+  return new_state;
+}
 
 class FG_eval {
  public:
@@ -84,12 +97,23 @@ class FG_eval {
     }
 
     fg[0] = 0;
-    double ref_v = 30;
+    double ref_v = 10;
 
     for (int t = 0; t < N; t++) {
       fg[0] += CppAD::pow(vars[start_cte + t], 2);
       fg[0] += CppAD::pow(vars[start_epsi + t], 2);
       fg[0] += CppAD::pow(vars[start_v + t] - ref_v, 2);
+    }
+
+    for (int t = 0; t < N - 1; t++) {
+      fg[0] += CppAD::pow(vars[start_delta + t], 2);
+      fg[0] += CppAD::pow(vars[start_a + t], 2);
+    }
+
+    // Minimize the value gap between sequential actuations.
+    for (int t = 0; t < N - 2; t++) {
+      fg[0] += CppAD::pow(vars[start_delta + t + 1] - vars[start_delta + t], 2);
+      fg[0] += CppAD::pow(vars[start_a + t + 1] - vars[start_a + t], 2);
     }
   }
 };
@@ -137,13 +161,13 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   }
 
   for (int i = start_delta; i < start_a; i++) {
-    vars_lowerbound[i] = -0.436332313;
-    vars_upperbound[i] = 0.436332313;
+    vars_lowerbound[i] = -steering_limit_rad;
+    vars_upperbound[i] = steering_limit_rad;
   }
 
   for (int i = start_a; i < n_vars; i++) {
     vars_lowerbound[i] = -1.0;
-    vars_upperbound[i] = 30.0;
+    vars_upperbound[i] = 1.0;
   }
 
   // Lower and upper limits for the constraints
@@ -178,17 +202,17 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   // options for IPOPT solver
   std::string options;
   // Uncomment this if you'd like more print information
-  // options += "Integer print_level  0\n";
+  options += "Integer print_level  0\n";
   // NOTE: Setting sparse to true allows the solver to take advantage
   // of sparse routines, this makes the computation MUCH FASTER. If you
   // can uncomment 1 of these and see if it makes a difference or not but
   // if you uncomment both the computation time should go up in orders of
   // magnitude.
-  // options += "Sparse  true        forward\n";
-  // options += "Sparse  true        reverse\n";
+  options += "Sparse  true        forward\n";
+  options += "Sparse  true        reverse\n";
   // NOTE: Currently the solver has a maximum time limit of 0.5 seconds.
   // Change this as you see fit.
-  // options += "Numeric max_cpu_time          0.5\n";
+  options += "Numeric max_cpu_time          0.5\n";
 
   // place to return solution
   CppAD::ipopt::solve_result<Dvector> solution;
@@ -203,7 +227,7 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
 
   // Cost
   auto cost = solution.obj_value;
-  std::cout << "Cost " << cost << std::endl;
+  // std::cout << "Cost " << cost << std::endl;
 
   // TODO: Return the first actuator values. The variables can be accessed with
   // `solution.x[i]`.

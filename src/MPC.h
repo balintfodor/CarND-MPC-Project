@@ -17,6 +17,11 @@ class MPC {
   vector<double> Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs);
   vector<double> solx;
   vector<double> soly;
+
+  static const double steering_limit_rad;
 };
+
+Eigen::VectorXd globalKinematicStep(double x0, double y0,
+  double psi0, double v0, double dt, double delta = 0.0, double a = 0.0);
 
 #endif /* MPC_H */
