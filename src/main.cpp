@@ -120,6 +120,8 @@ int main() {
           msgJson["steering_angle"] = steer_value;
           msgJson["throttle"] = throttle_value;
 
+          cout << "steering_angle: " << steer_value << "\t" << "throttle: " << throttle_value << endl;
+
           msgJson["mpc_x"] = mpc.solx;
           msgJson["mpc_y"] = mpc.soly;
 
@@ -143,7 +145,7 @@ int main() {
 
         auto timing_finish = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = timing_finish - timing_start;
-        cout << "latency ~= " << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << endl;
+        // cout << "latency ~= " << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << endl;
 
       } else {
         // Manual driving

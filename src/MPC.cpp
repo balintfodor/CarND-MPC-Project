@@ -99,24 +99,35 @@ class FG_eval {
     fg[0] = 0;
 
     for (int i = 0; i < N; ++i) {
+      // lower weight for the future
       double w = (N - i) / (double)N;
+      // high CTE penalty
       fg[0] += w * CppAD::pow(vars[start_cte + i], 2);
+      // high ePsi penalty
       fg[0] += w * CppAD::pow(vars[start_epsi + i], 2);
-      fg[0] += w * (-200) * vars[start_v + i];
+      // high speed reward
+      fg[0] += w * 3.5 * (-1) * vars[start_v + i];
     }
 
     for (int i = 0; i < N - 1; ++i) {
+      // lower weight for the future
       double w = (N - 1 - i) / (double)(N - 1);
-      fg[0] += w * CppAD::pow(vars[start_v + i], 2) * CppAD::pow(vars[start_delta + i], 2);
-      fg[0] += w * 100 * CppAD::pow(vars[start_a + i], 2);
-      fg[0] += w * 10 * CppAD::pow(vars[start_cte + i + 1] - vars[start_cte + i], 2);
-      fg[0] += w * 10 * CppAD::pow(vars[start_epsi + i + 1] - vars[start_epsi + i], 2);
+      // high steering angle penalty, increasing with the velocity
+      fg[0] += w * (CppAD::pow(vars[start_v + i], 2) + 1) * CppAD::pow(vars[start_delta + i], 2);
+      // high throttle penalty, increasing with CTE
+      fg[0] += w * (CppAD::pow(vars[start_cte + i], 2) + 1) * CppAD::pow(vars[start_a + i], 2);
+      // strong penalty on sudden changes in CTE and ePsi -> trying to reduce wobbly control
+      fg[0] += w * 300 * CppAD::pow(vars[start_cte + i + 1] - vars[start_cte + i], 2);
+      fg[0] += w * 300 * CppAD::pow(vars[start_epsi + i + 1] - vars[start_epsi + i], 2);
     }
 
     for (int i = 0; i < N - 2; ++i) {
+      // lower weight for the future
       double w = (N - 2 - i) / (double)(N - 2);
-      fg[0] += w * 100 * CppAD::pow(vars[start_delta + i + 1] - vars[start_delta + i], 2);
-      fg[0] += w * 100 * CppAD::pow(vars[start_a + i + 1] - vars[start_a + i], 2);
+      // rough steering penalty
+      fg[0] += w * CppAD::pow(vars[start_delta + i + 1] - vars[start_delta + i], 2);
+      // hectic throttling penalty
+      fg[0] += w * CppAD::pow(vars[start_a + i + 1] - vars[start_a + i], 2);
     }
   }
 };
@@ -131,17 +142,9 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   bool ok = true;
   typedef CPPAD_TESTVECTOR(double) Dvector;
 
-  // TODO: Set the number of model variables (includes both states and inputs).
-  // For example: If the state is a 4 element vector, the actuators is a 2
-  // element vector and there are 10 timesteps. The number of variables is:
-  //
-  // 4 * 10 + 2 * 9
   size_t n_vars = n_state * N + n_act * (N - 1);
-  // TODO: Set the number of constraints
   size_t n_constraints = n_state * N;
 
-  // Initial value of the independent variables.
-  // SHOULD BE 0 besides initial state.
   Dvector vars(n_vars);
   for (int i = 0; i < n_vars; i++) {
     vars[i] = 0;
@@ -156,7 +159,6 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
 
   Dvector vars_lowerbound(n_vars);
   Dvector vars_upperbound(n_vars);
-  // TODO: Set lower and upper limits for variables.
 
   for (int i = 0; i < start_delta; i++) {
     vars_lowerbound[i] = -1.0e19;
@@ -173,8 +175,6 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
     vars_upperbound[i] = 1.0;
   }
 
-  // Lower and upper limits for the constraints
-  // Should be 0 besides initial state.
   Dvector constraints_lowerbound(n_constraints);
   Dvector constraints_upperbound(n_constraints);
   for (int i = 0; i < n_constraints; i++) {
@@ -229,7 +229,7 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   ok &= solution.status == CppAD::ipopt::solve_result<Dvector>::success;
 
   // Cost
-  auto cost = solution.obj_value;
+  // auto cost = solution.obj_value;
   // std::cout << "Cost " << cost << std::endl;
 
   // TODO: Return the first actuator values. The variables can be accessed with
