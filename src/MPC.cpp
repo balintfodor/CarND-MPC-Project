@@ -9,8 +9,8 @@ using CppAD::AD;
  const double MPC::steering_limit_rad = 0.436332313; // 25 deg
 
 // TODO: Set the timestep length and duration
-const size_t N = 15;
-const double dt = 0.1;
+const size_t N = 20;
+const double dt = 0.05;
 
 const size_t n_state = 6;
 const size_t n_act = 2;
@@ -56,13 +56,10 @@ class FG_eval {
 
   typedef CPPAD_TESTVECTOR(AD<double>) ADvector;
   void operator()(ADvector& fg, const ADvector& vars) {
-    // TODO: implement MPC
-    // `fg` a vector of the cost constraints, `vars` is a vector of variable values (state & actuators)
-    // NOTE: You'll probably go back and forth between this function and
-    // the Solver function below.
 
     static const double invLf = 1.0 / Lf;
 
+    // initial values
     fg[1 + start_x] = vars[start_x];
     fg[1 + start_y] = vars[start_y];
     fg[1 + start_psi] = vars[start_psi];
@@ -70,6 +67,7 @@ class FG_eval {
     fg[1 + start_cte] = vars[start_cte];
     fg[1 + start_epsi] = vars[start_epsi];
 
+    // constraints connecting timesteps
     for (int i = 1; i < N; ++i) {
       AD<double> x1 = vars[start_x + i];
       AD<double> y1 = vars[start_y + i];
@@ -88,6 +86,7 @@ class FG_eval {
       AD<double> delta0 = vars[start_delta + i - 1];
       AD<double> a0 = vars[start_a + i - 1];
 
+      // kinematic equations
       fg[1 + start_x + i] = x1 - (x0 + v0 * CppAD::cos(psi0) * dt);
       fg[1 + start_y + i] = y1 - (y0 + v0 * CppAD::sin(psi0) * dt);
       fg[1 + start_psi + i] = psi1 - (psi0 - v0 * invLf * delta0 * dt);
@@ -96,24 +95,28 @@ class FG_eval {
       fg[1 + start_epsi + i] = epsi1 - (epsi0 - v0 * invLf * delta0 * dt);
     }
 
+    // cost function
     fg[0] = 0;
-    double ref_v = 10;
 
-    for (int t = 0; t < N; t++) {
-      fg[0] += CppAD::pow(vars[start_cte + t], 2);
-      fg[0] += CppAD::pow(vars[start_epsi + t], 2);
-      fg[0] += CppAD::pow(vars[start_v + t] - ref_v, 2);
+    for (int i = 0; i < N; ++i) {
+      double w = (N - i) / (double)N;
+      fg[0] += w * CppAD::pow(vars[start_cte + i], 2);
+      fg[0] += w * CppAD::pow(vars[start_epsi + i], 2);
+      fg[0] += w * (-200) * vars[start_v + i];
     }
 
-    for (int t = 0; t < N - 1; t++) {
-      fg[0] += CppAD::pow(vars[start_delta + t], 2);
-      fg[0] += CppAD::pow(vars[start_a + t], 2);
+    for (int i = 0; i < N - 1; ++i) {
+      double w = (N - 1 - i) / (double)(N - 1);
+      fg[0] += w * CppAD::pow(vars[start_v + i], 2) * CppAD::pow(vars[start_delta + i], 2);
+      fg[0] += w * 100 * CppAD::pow(vars[start_a + i], 2);
+      fg[0] += w * 10 * CppAD::pow(vars[start_cte + i + 1] - vars[start_cte + i], 2);
+      fg[0] += w * 10 * CppAD::pow(vars[start_epsi + i + 1] - vars[start_epsi + i], 2);
     }
 
-    // Minimize the value gap between sequential actuations.
-    for (int t = 0; t < N - 2; t++) {
-      fg[0] += CppAD::pow(vars[start_delta + t + 1] - vars[start_delta + t], 2);
-      fg[0] += CppAD::pow(vars[start_a + t + 1] - vars[start_a + t], 2);
+    for (int i = 0; i < N - 2; ++i) {
+      double w = (N - 2 - i) / (double)(N - 2);
+      fg[0] += w * 100 * CppAD::pow(vars[start_delta + i + 1] - vars[start_delta + i], 2);
+      fg[0] += w * 100 * CppAD::pow(vars[start_a + i + 1] - vars[start_a + i], 2);
     }
   }
 };

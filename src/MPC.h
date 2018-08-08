@@ -22,6 +22,6 @@ class MPC {
 };
 
 Eigen::VectorXd globalKinematicStep(double x0, double y0,
-  double psi0, double v0, double dt, double delta = 0.0, double a = 0.0);
+  double psi0, double v0, double dt, double delta, double a);
 
 #endif /* MPC_H */
